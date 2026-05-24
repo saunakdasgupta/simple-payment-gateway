@@ -72,15 +72,16 @@ public class PaymentGatewayService {
 
   private PaymentResponse buildAndStore(UUID paymentId, PostPaymentRequest request,
       PaymentStatus status, String message) {
-    PaymentResponse response = new PaymentResponse();
-    response.setId(paymentId);
-    response.setStatus(status);
-    response.setCardNumberLastFour(safeLastFour(request.getCardNumber()));
-    response.setExpiryMonth(request.getExpiryMonth());
-    response.setExpiryYear(request.getExpiryYear());
-    response.setCurrency(request.getCurrency());
-    response.setAmount(request.getAmount());
-    response.setMessage(message);
+    PaymentResponse response = new PaymentResponse(
+        paymentId,
+        status,
+        safeLastFour(request.getCardNumber()),
+        request.getExpiryMonth(),
+        request.getExpiryYear(),
+        request.getCurrency(),
+        request.getAmount(),
+        message
+    );
     paymentsRepository.add(response);
     return response;
   }

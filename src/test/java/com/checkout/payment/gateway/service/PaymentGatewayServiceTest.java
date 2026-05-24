@@ -236,8 +236,7 @@ class PaymentGatewayServiceTest {
   @Test
   void shouldReturnPaymentWhenFoundById() {
     UUID id = UUID.randomUUID();
-    PaymentResponse stored = new PaymentResponse();
-    stored.setId(id);
+    PaymentResponse stored = new PaymentResponse(id, PaymentStatus.AUTHORIZED, 8877, 12, 2027, "GBP", 100, null);
     when(paymentsRepository.get(id)).thenReturn(Optional.of(stored));
 
     assertThat(service.getPaymentById(id)).isSameAs(stored);

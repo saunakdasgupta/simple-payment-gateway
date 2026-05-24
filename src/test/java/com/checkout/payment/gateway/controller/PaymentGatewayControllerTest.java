@@ -118,16 +118,7 @@ class PaymentGatewayControllerTest {
 
   private PaymentResponse buildResponse(UUID id, PaymentStatus status, int lastFour,
       String message) {
-    PaymentResponse response = new PaymentResponse();
-    response.setId(id);
-    response.setStatus(status);
-    response.setCardNumberLastFour(lastFour);
-    response.setExpiryMonth(12);
-    response.setExpiryYear(2027);
-    response.setCurrency("GBP");
-    response.setAmount(100);
-    response.setMessage(message);
-    return response;
+    return new PaymentResponse(id, status, lastFour, 12, 2027, "GBP", 100, message);
   }
 
   private String validPaymentRequest() {

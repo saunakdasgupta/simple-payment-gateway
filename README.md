@@ -151,6 +151,24 @@ With an external database, `GET /payment/{id}` would introduce an additional fai
 
 `RestTemplate` is used for synchronous HTTP calls to the bank. A 10-second connect and read timeout is configured. `WebClient` (reactive) was not used as it adds unnecessary complexity for a synchronous request-response flow.
 
+## Production Considerations
+
+The following are out of scope for this challenge but would be required in a production system:
+
+### Idempotency
+
+`POST /payment` is not idempotent. A merchant whose HTTP client times out and retries will submit a second payment request that the bank treats as a new transaction, potentially charging the customer twice.
+
+The standard solution is a client-supplied `Idempotency-Key` header. The gateway stores the key-to-response mapping (e.g., in Redis with a 24-hour TTL) and returns the cached response on replay without calling the bank. Concurrent requests with the same key require a distributed lock to prevent both reaching the bank before the first response is stored.
+
+### Thread Safety
+
+The in-memory `HashMap` in `PaymentsRepository` is not thread-safe under concurrent writes. In production this is replaced by a persistent store, but if an in-memory store were retained it should be a `ConcurrentHashMap`.
+
+### Persistent Storage
+
+Payments are stored in a `HashMap` that is lost on restart. In production this would be replaced with a persistent store (e.g., PostgreSQL) and a distributed cache (e.g., Redis) for horizontal scaling across multiple instances.
+
 ## Project Structure
 
 ```
