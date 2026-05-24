@@ -6,7 +6,7 @@ import com.checkout.payment.gateway.exception.EventProcessingException;
 import com.checkout.payment.gateway.model.BankPaymentRequest;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
-import com.checkout.payment.gateway.model.PostPaymentResponse;
+import com.checkout.payment.gateway.model.PaymentResponse;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
 import com.checkout.payment.gateway.validation.PaymentRequestValidator;
 import java.util.Optional;
@@ -32,12 +32,15 @@ public class PaymentGatewayService {
     this.validator = validator;
   }
 
-  public PostPaymentResponse getPaymentById(UUID id) {
-    LOG.debug("Requesting access to payment with ID {}", id);
-    return paymentsRepository.get(id).orElseThrow(() -> new EventProcessingException("Invalid ID"));
+  public PaymentResponse getPaymentById(UUID id) {
+    LOG.info("Retrieving payment with ID {}", id);
+    return paymentsRepository.get(id).orElseThrow(() -> {
+      LOG.warn("Payment not found for ID: {}", id);
+      return new EventProcessingException("Payment not found");
+    });
   }
 
-  public PostPaymentResponse processPayment(PostPaymentRequest paymentRequest) {
+  public PaymentResponse processPayment(PostPaymentRequest paymentRequest) {
     UUID paymentId = UUID.randomUUID();
 
     Optional<String> validationError = validator.validate(paymentRequest);
@@ -67,9 +70,9 @@ public class PaymentGatewayService {
     return buildAndStore(paymentId, paymentRequest, status, null);
   }
 
-  private PostPaymentResponse buildAndStore(UUID paymentId, PostPaymentRequest request,
+  private PaymentResponse buildAndStore(UUID paymentId, PostPaymentRequest request,
       PaymentStatus status, String message) {
-    PostPaymentResponse response = new PostPaymentResponse();
+    PaymentResponse response = new PaymentResponse();
     response.setId(paymentId);
     response.setStatus(status);
     response.setCardNumberLastFour(safeLastFour(request.getCardNumber()));

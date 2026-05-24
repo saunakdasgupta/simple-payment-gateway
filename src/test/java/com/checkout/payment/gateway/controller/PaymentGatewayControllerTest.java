@@ -10,7 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.BankUnavailableException;
 import com.checkout.payment.gateway.exception.EventProcessingException;
-import com.checkout.payment.gateway.model.PostPaymentResponse;
+import com.checkout.payment.gateway.model.PaymentResponse;
 import com.checkout.payment.gateway.service.PaymentGatewayService;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -30,7 +30,7 @@ class PaymentGatewayControllerTest {
 
   @Test
   void whenPaymentWithIdExistThenCorrectPaymentIsReturned() throws Exception {
-    PostPaymentResponse payment = buildResponse(UUID.randomUUID(), PaymentStatus.AUTHORIZED, 8877, null);
+    PaymentResponse payment = buildResponse(UUID.randomUUID(), PaymentStatus.AUTHORIZED, 8877, null);
     when(paymentGatewayService.getPaymentById(payment.getId())).thenReturn(payment);
 
     mvc.perform(get("/payment/" + payment.getId()))
@@ -47,11 +47,11 @@ class PaymentGatewayControllerTest {
   @Test
   void whenPaymentWithIdDoesNotExistThen404IsReturned() throws Exception {
     UUID id = UUID.randomUUID();
-    when(paymentGatewayService.getPaymentById(id)).thenThrow(new EventProcessingException("Invalid ID"));
+    when(paymentGatewayService.getPaymentById(id)).thenThrow(new EventProcessingException("Payment not found"));
 
     mvc.perform(get("/payment/" + id))
         .andExpect(status().isNotFound())
-        .andExpect(jsonPath("$.message").value("Page not found"));
+        .andExpect(jsonPath("$.message").value("Payment not found"));
   }
 
   // --- POST: authorized ---
@@ -116,9 +116,9 @@ class PaymentGatewayControllerTest {
         .andExpect(jsonPath("$.message").isNotEmpty());
   }
 
-  private PostPaymentResponse buildResponse(UUID id, PaymentStatus status, int lastFour,
+  private PaymentResponse buildResponse(UUID id, PaymentStatus status, int lastFour,
       String message) {
-    PostPaymentResponse response = new PostPaymentResponse();
+    PaymentResponse response = new PaymentResponse();
     response.setId(id);
     response.setStatus(status);
     response.setCardNumberLastFour(lastFour);

@@ -145,6 +145,8 @@ The gateway calls the acquiring bank at `bank.simulator.url` (configured in `app
 
 Payments are stored in a `HashMap` keyed by UUID. This is intentionally simple for the scope of this challenge. In production, this would be replaced with a persistent store (e.g., PostgreSQL for durability) and a distributed cache (e.g., Redis) for horizontal scaling.
 
+With an external database, `GET /payment/{id}` would introduce an additional failure surface beyond "not found" — connection failures, timeouts, and transient errors. These must be handled as a distinct error category and must not be conflated with the payment's own `message` field (which carries the rejection reason set at processing time and should never be modified after). A `PaymentRepositoryException` mapped to `503 Service Unavailable` via `CommonExceptionHandler` would be the appropriate pattern, keeping business outcomes and infrastructure failures in separate response types.
+
 ### RestTemplate
 
 `RestTemplate` is used for synchronous HTTP calls to the bank. A 10-second connect and read timeout is configured. `WebClient` (reactive) was not used as it adds unnecessary complexity for a synchronous request-response flow.

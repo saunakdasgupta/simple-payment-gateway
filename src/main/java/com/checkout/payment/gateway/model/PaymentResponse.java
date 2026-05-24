@@ -5,7 +5,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.UUID;
 
-public class PostPaymentResponse {
+public class PaymentResponse {
 
   private UUID id;
   private PaymentStatus status;
@@ -85,7 +85,7 @@ public class PostPaymentResponse {
 
   @Override
   public String toString() {
-    return "PostPaymentResponse{" +
+    return "PaymentResponse{" +
         "id=" + id +
         ", status=" + status +
         ", cardNumberLastFour=" + cardNumberLastFour +

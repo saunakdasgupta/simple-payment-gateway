@@ -14,7 +14,7 @@ import com.checkout.payment.gateway.exception.EventProcessingException;
 import com.checkout.payment.gateway.model.BankPaymentRequest;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
-import com.checkout.payment.gateway.model.PostPaymentResponse;
+import com.checkout.payment.gateway.model.PaymentResponse;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
 import com.checkout.payment.gateway.validation.PaymentRequestValidator;
 import java.util.Optional;
@@ -53,7 +53,7 @@ class PaymentGatewayServiceTest {
     PostPaymentRequest request = requestFor("2222405343248877");
     when(validator.validate(request)).thenReturn(Optional.of("card_number must be 14-19 numeric characters"));
 
-    PostPaymentResponse response = service.processPayment(request);
+    PaymentResponse response = service.processPayment(request);
 
     assertThat(response.getStatus()).isEqualTo(PaymentStatus.REJECTED);
   }
@@ -64,7 +64,7 @@ class PaymentGatewayServiceTest {
     String reason = "card_number must be 14-19 numeric characters";
     when(validator.validate(request)).thenReturn(Optional.of(reason));
 
-    PostPaymentResponse response = service.processPayment(request);
+    PaymentResponse response = service.processPayment(request);
 
     assertThat(response.getMessage()).isEqualTo(reason);
   }
@@ -84,7 +84,7 @@ class PaymentGatewayServiceTest {
     PostPaymentRequest request = requestFor("2222405343248877");
     when(validator.validate(request)).thenReturn(Optional.of("Card has expired"));
 
-    PostPaymentResponse response = service.processPayment(request);
+    PaymentResponse response = service.processPayment(request);
 
     assertThat(response.getId()).isNotNull();
   }
@@ -96,7 +96,7 @@ class PaymentGatewayServiceTest {
 
     service.processPayment(request);
 
-    ArgumentCaptor<PostPaymentResponse> captor = ArgumentCaptor.forClass(PostPaymentResponse.class);
+    ArgumentCaptor<PaymentResponse> captor = ArgumentCaptor.forClass(PaymentResponse.class);
     verify(paymentsRepository).add(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(PaymentStatus.REJECTED);
   }
@@ -109,7 +109,7 @@ class PaymentGatewayServiceTest {
     when(validator.validate(request)).thenReturn(Optional.empty());
     when(bankClient.processPayment(any())).thenReturn(new BankPaymentResponse(true, "auth-code-123"));
 
-    PostPaymentResponse response = service.processPayment(request);
+    PaymentResponse response = service.processPayment(request);
 
     assertThat(response.getStatus()).isEqualTo(PaymentStatus.AUTHORIZED);
   }
@@ -120,7 +120,7 @@ class PaymentGatewayServiceTest {
     when(validator.validate(request)).thenReturn(Optional.empty());
     when(bankClient.processPayment(any())).thenReturn(new BankPaymentResponse(true, "auth-code-123"));
 
-    PostPaymentResponse response = service.processPayment(request);
+    PaymentResponse response = service.processPayment(request);
 
     assertThat(response.getMessage()).isNull();
   }
@@ -133,7 +133,7 @@ class PaymentGatewayServiceTest {
     when(validator.validate(request)).thenReturn(Optional.empty());
     when(bankClient.processPayment(any())).thenReturn(new BankPaymentResponse(false, ""));
 
-    PostPaymentResponse response = service.processPayment(request);
+    PaymentResponse response = service.processPayment(request);
 
     assertThat(response.getStatus()).isEqualTo(PaymentStatus.DECLINED);
   }
@@ -144,7 +144,7 @@ class PaymentGatewayServiceTest {
     when(validator.validate(request)).thenReturn(Optional.empty());
     when(bankClient.processPayment(any())).thenReturn(new BankPaymentResponse(false, ""));
 
-    PostPaymentResponse response = service.processPayment(request);
+    PaymentResponse response = service.processPayment(request);
 
     assertThat(response.getMessage()).isNull();
   }
@@ -157,7 +157,7 @@ class PaymentGatewayServiceTest {
     when(validator.validate(request)).thenReturn(Optional.empty());
     when(bankClient.processPayment(any())).thenReturn(new BankPaymentResponse(true, "auth-code"));
 
-    PostPaymentResponse response = service.processPayment(request);
+    PaymentResponse response = service.processPayment(request);
 
     assertThat(response.getCardNumberLastFour()).isEqualTo(8877);
   }
@@ -167,7 +167,7 @@ class PaymentGatewayServiceTest {
     PostPaymentRequest request = requestFor("abc");
     when(validator.validate(request)).thenReturn(Optional.of("card_number must be 14-19 numeric characters"));
 
-    PostPaymentResponse response = service.processPayment(request);
+    PaymentResponse response = service.processPayment(request);
 
     assertThat(response.getCardNumberLastFour()).isEqualTo(0);
   }
@@ -212,9 +212,9 @@ class PaymentGatewayServiceTest {
     when(validator.validate(request)).thenReturn(Optional.empty());
     when(bankClient.processPayment(any())).thenReturn(new BankPaymentResponse(true, "auth-code"));
 
-    PostPaymentResponse response = service.processPayment(request);
+    PaymentResponse response = service.processPayment(request);
 
-    ArgumentCaptor<PostPaymentResponse> captor = ArgumentCaptor.forClass(PostPaymentResponse.class);
+    ArgumentCaptor<PaymentResponse> captor = ArgumentCaptor.forClass(PaymentResponse.class);
     verify(paymentsRepository).add(captor.capture());
     assertThat(captor.getValue()).isSameAs(response);
   }
@@ -236,7 +236,7 @@ class PaymentGatewayServiceTest {
   @Test
   void shouldReturnPaymentWhenFoundById() {
     UUID id = UUID.randomUUID();
-    PostPaymentResponse stored = new PostPaymentResponse();
+    PaymentResponse stored = new PaymentResponse();
     stored.setId(id);
     when(paymentsRepository.get(id)).thenReturn(Optional.of(stored));
 

@@ -15,8 +15,8 @@ public class CommonExceptionHandler {
 
   @ExceptionHandler(EventProcessingException.class)
   public ResponseEntity<ErrorResponse> handleEventProcessingException(EventProcessingException ex) {
-    LOG.error("Exception happened", ex);
-    return new ResponseEntity<>(new ErrorResponse("Page not found"), HttpStatus.NOT_FOUND);
+    // Service already logged with full context (payment ID); no additional logging needed here
+    return new ResponseEntity<>(new ErrorResponse(ex.getMessage()), HttpStatus.NOT_FOUND);
   }
 
   @ExceptionHandler(BankUnavailableException.class)

@@ -3,7 +3,7 @@ package com.checkout.payment.gateway.controller;
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.model.ErrorResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
-import com.checkout.payment.gateway.model.PostPaymentResponse;
+import com.checkout.payment.gateway.model.PaymentResponse;
 import com.checkout.payment.gateway.service.PaymentGatewayService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -37,7 +37,7 @@ public class PaymentGatewayController {
           content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   })
   @GetMapping("/payment/{id}")
-  public ResponseEntity<PostPaymentResponse> getPostPaymentEventById(@PathVariable UUID id) {
+  public ResponseEntity<PaymentResponse> getPostPaymentEventById(@PathVariable UUID id) {
     return new ResponseEntity<>(paymentGatewayService.getPaymentById(id), HttpStatus.OK);
   }
 
@@ -52,8 +52,8 @@ public class PaymentGatewayController {
           content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   })
   @PostMapping("/payment")
-  public ResponseEntity<PostPaymentResponse> processPayment(@RequestBody PostPaymentRequest request) {
-    PostPaymentResponse response = paymentGatewayService.processPayment(request);
+  public ResponseEntity<PaymentResponse> processPayment(@RequestBody PostPaymentRequest request) {
+    PaymentResponse response = paymentGatewayService.processPayment(request);
     HttpStatus status = response.getStatus() == PaymentStatus.REJECTED
         ? HttpStatus.BAD_REQUEST
         : HttpStatus.OK;
