@@ -9,17 +9,25 @@ A Spring Boot REST API that allows merchants to process card payments and retrie
 
 ## Running the Application
 
-Start the bank simulator and the gateway together:
+The simplest way to run everything locally:
+
+```bash
+./run_local.sh
+```
+
+This starts the bank simulator in the background, waits until it is ready, then starts the gateway. Ctrl+C stops both.
+
+Alternatively, start them separately:
+
+```bash
+docker-compose up -d bank_simulator
+./gradlew bootRun
+```
+
+Or start everything via Docker Compose (requires building the image first):
 
 ```bash
 docker-compose up
-```
-
-Or run the bank simulator separately and start the gateway via Gradle:
-
-```bash
-docker-compose up bank_simulator
-./gradlew bootRun
 ```
 
 The gateway listens on `http://localhost:8090`.  
