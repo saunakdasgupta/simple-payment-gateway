@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Payment Gateway</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 600px;
+      margin: 80px auto;
+      padding: 0 24px;
+      color: #1a1a1a;
+    }
+    h1 { font-size: 1.5rem; margin-bottom: 8px; }
+    p  { color: #555; margin-bottom: 32px; }
+    ul { list-style: none; padding: 0; }
+    li { margin-bottom: 12px; }
+    a {
+      display: inline-block;
+      padding: 10px 18px;
+      border: 1px solid #d0d0d0;
+      border-radius: 6px;
+      text-decoration: none;
+      color: #0066cc;
+      font-size: 0.95rem;
+      transition: background 0.15s;
+    }
+    a:hover { background: #f5f5f5; }
+    .label {
+      display: inline-block;
+      margin-left: 10px;
+      font-size: 0.8rem;
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <h1>Payment Gateway</h1>
+  <p>A REST API for processing and retrieving card payments via an acquiring bank.</p>
+  <ul>
+    <li>
+      <a href="/swagger-ui/index.html">API Documentation</a>
+      <span class="label">Swagger UI</span>
+    </li>
+    <li>
+      <a href="/actuator/health">Health</a>
+      <span class="label">/actuator/health</span>
+    </li>
+    <li>
+      <a href="/actuator">Actuator</a>
+      <span class="label">/actuator</span>
+    </li>
+  </ul>
+</body>
+</html>

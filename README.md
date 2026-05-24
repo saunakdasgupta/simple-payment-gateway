@@ -23,8 +23,10 @@ docker-compose up bank_simulator
 ```
 
 The gateway listens on `http://localhost:8090`.  
+Index page: `http://localhost:8090/`  
 Swagger UI: `http://localhost:8090/swagger-ui/index.html`  
-Health check: `http://localhost:8090/actuator/health`
+Health check: `http://localhost:8090/actuator/health`  
+Actuator: `http://localhost:8090/actuator`
 
 ## Running the Tests
 
