@@ -1,9 +1,12 @@
 package com.checkout.payment.gateway.model;
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.UUID;
 
 public class PostPaymentResponse {
+
   private UUID id;
   private PaymentStatus status;
   private int cardNumberLastFour;
@@ -12,6 +15,8 @@ public class PostPaymentResponse {
   private String currency;
   private int amount;
 
+  @Schema(description = "Reason for rejection. Only present when status is Rejected.")
+  private String message;
 
   public UUID getId() {
     return id;
@@ -69,9 +74,18 @@ public class PostPaymentResponse {
     this.amount = amount;
   }
 
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  public String getMessage() {
+    return message;
+  }
+
+  public void setMessage(String message) {
+    this.message = message;
+  }
+
   @Override
   public String toString() {
-    return "GetPaymentResponse{" +
+    return "PostPaymentResponse{" +
         "id=" + id +
         ", status=" + status +
         ", cardNumberLastFour=" + cardNumberLastFour +
@@ -79,6 +93,7 @@ public class PostPaymentResponse {
         ", expiryYear=" + expiryYear +
         ", currency='" + currency + '\'' +
         ", amount=" + amount +
+        ", message='" + message + '\'' +
         '}';
   }
 }

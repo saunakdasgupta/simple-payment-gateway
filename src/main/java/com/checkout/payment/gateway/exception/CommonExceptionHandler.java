@@ -14,9 +14,15 @@ public class CommonExceptionHandler {
   private static final Logger LOG = LoggerFactory.getLogger(CommonExceptionHandler.class);
 
   @ExceptionHandler(EventProcessingException.class)
-  public ResponseEntity<ErrorResponse> handleException(EventProcessingException ex) {
+  public ResponseEntity<ErrorResponse> handleEventProcessingException(EventProcessingException ex) {
     LOG.error("Exception happened", ex);
-    return new ResponseEntity<>(new ErrorResponse("Page not found"),
-        HttpStatus.NOT_FOUND);
+    return new ResponseEntity<>(new ErrorResponse("Page not found"), HttpStatus.NOT_FOUND);
+  }
+
+  @ExceptionHandler(BankUnavailableException.class)
+  public ResponseEntity<ErrorResponse> handleBankUnavailableException(BankUnavailableException ex) {
+    LOG.warn("Bank unavailable: {}", ex.getMessage());
+    return new ResponseEntity<>(new ErrorResponse("Payment processing temporarily unavailable"),
+        HttpStatus.BAD_GATEWAY);
   }
 }
