@@ -17,12 +17,13 @@ import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PaymentResponse;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
 import com.checkout.payment.gateway.validation.PaymentRequestValidator;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -33,7 +34,12 @@ class PaymentGatewayServiceTest {
   @Mock private BankClient bankClient;
   @Mock private PaymentRequestValidator validator;
 
-  @InjectMocks private PaymentGatewayService service;
+  private PaymentGatewayService service;
+
+  @BeforeEach
+  void setUp() {
+    service = new PaymentGatewayService(paymentsRepository, bankClient, validator, new SimpleMeterRegistry());
+  }
 
   private PostPaymentRequest requestFor(String cardNumber) {
     PostPaymentRequest request = new PostPaymentRequest();

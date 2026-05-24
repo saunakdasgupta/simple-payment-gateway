@@ -26,7 +26,8 @@ The gateway listens on `http://localhost:8090`.
 Index page: `http://localhost:8090/`  
 Swagger UI: `http://localhost:8090/swagger-ui/index.html`  
 Health check: `http://localhost:8090/actuator/health`  
-Actuator: `http://localhost:8090/actuator`
+Actuator: `http://localhost:8090/actuator`  
+Metrics (Prometheus): `http://localhost:8090/actuator/prometheus`
 
 ## Running the Tests
 
@@ -153,6 +154,50 @@ With an external database, `GET /payment/{id}` would introduce an additional fai
 
 `RestTemplate` is used for synchronous HTTP calls to the bank. A 10-second connect and read timeout is configured. `WebClient` (reactive) was not used as it adds unnecessary complexity for a synchronous request-response flow.
 
+## Observability
+
+### Health Endpoints
+
+A custom `BankSimulatorHealthIndicator` probes the acquiring bank on every health check. The app uses a custom `DEGRADED` status (HTTP 200) when the bank is unreachable — the gateway is still alive and can serve `GET /payment/{id}` requests, so it should not be removed from the load balancer.
+
+| Endpoint | Bank down → | K8s action |
+|---|---|---|
+| `/actuator/health` | `DEGRADED` (HTTP 200) | Monitoring alert |
+| `/actuator/health/liveness` | `UP` | No restart |
+| `/actuator/health/readiness` | `UP` | Keep routing traffic |
+
+### Metrics
+
+The following endpoints are exposed:
+
+| Endpoint | Contents |
+|---|---|
+| `/actuator/prometheus` | All metrics in Prometheus format (scrape target for Grafana) |
+| `/actuator/metrics` | Individual metric lookup |
+| `/actuator/info` | App name and description |
+
+**Custom metrics:**
+
+- `payments.processed{status="Authorized"}` — count of payments authorized by the bank
+- `payments.processed{status="Declined"}` — count of payments declined by the bank
+- `payments.processed{status="Rejected"}` — count of payments rejected by validation
+
+Spring Boot auto-instruments `http.server.requests` (request count, latency, HTTP status) for all endpoints at no extra cost.
+
+### Log Correlation
+
+Every log statement produced during a payment request carries the payment UUID via MDC (`paymentId`). This includes logs from all classes in the call chain — the service, `MountebankBankClient`, and `CommonExceptionHandler` — without passing the ID through method signatures.
+
+Log format: `HH:mm:ss.SSS LEVEL [<paymentId>] logger - message`
+
+```
+10:14:05.001 INFO  [3c1a5b2d-4317-457f-8bb6-876eeb6c9968] PaymentGatewayService - Processing payment 3c1a5b2d...
+10:14:05.042 WARN  [3c1a5b2d-4317-457f-8bb6-876eeb6c9968] MountebankBankClient  - Bank unavailable at http://localhost:8080
+10:14:05.043 WARN  [3c1a5b2d-4317-457f-8bb6-876eeb6c9968] CommonExceptionHandler - Bank unavailable: Bank is currently unavailable
+```
+
+Non-payment logs (startup, health checks) leave the `paymentId` slot empty.
+
 ## Production Considerations
 
 The following are out of scope for this challenge but would be required in a production system:
@@ -165,7 +210,7 @@ The standard solution is a client-supplied `Idempotency-Key` header. The gateway
 
 ### Thread Safety
 
-The in-memory `HashMap` in `PaymentsRepository` is not thread-safe under concurrent writes. In production this is replaced by a persistent store, but if an in-memory store were retained it should be a `ConcurrentHashMap`.
+`PaymentsRepository` uses a `ConcurrentHashMap` to handle concurrent writes safely. In production this is replaced by a persistent store, but the in-memory implementation is thread-safe for the scope of this challenge.
 
 ### Persistent Storage
 

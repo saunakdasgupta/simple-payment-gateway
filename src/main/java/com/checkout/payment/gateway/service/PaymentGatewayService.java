@@ -9,10 +9,12 @@ import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PaymentResponse;
 import com.checkout.payment.gateway.repository.PaymentsRepository;
 import com.checkout.payment.gateway.validation.PaymentRequestValidator;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Optional;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -23,29 +25,46 @@ public class PaymentGatewayService {
   private final PaymentsRepository paymentsRepository;
   private final BankClient bankClient;
   private final PaymentRequestValidator validator;
+  private final MeterRegistry meterRegistry;
 
   public PaymentGatewayService(PaymentsRepository paymentsRepository,
       BankClient bankClient,
-      PaymentRequestValidator validator) {
+      PaymentRequestValidator validator,
+      MeterRegistry meterRegistry) {
     this.paymentsRepository = paymentsRepository;
     this.bankClient = bankClient;
     this.validator = validator;
+    this.meterRegistry = meterRegistry;
   }
 
   public PaymentResponse getPaymentById(UUID id) {
-    LOG.info("Retrieving payment with ID {}", id);
-    return paymentsRepository.get(id).orElseThrow(() -> {
-      LOG.warn("Payment not found for ID: {}", id);
-      return new EventProcessingException("Payment not found");
-    });
+    MDC.put("paymentId", id.toString());
+    try {
+      LOG.info("Retrieving payment with ID {}", id);
+      return paymentsRepository.get(id).orElseThrow(() -> {
+        LOG.warn("Payment not found for ID: {}", id);
+        return new EventProcessingException("Payment not found");
+      });
+    } finally {
+      MDC.remove("paymentId");
+    }
   }
 
   public PaymentResponse processPayment(PostPaymentRequest paymentRequest) {
     UUID paymentId = UUID.randomUUID();
+    MDC.put("paymentId", paymentId.toString());
+    try {
+      return doProcessPayment(paymentId, paymentRequest);
+    } finally {
+      MDC.remove("paymentId");
+    }
+  }
 
+  private PaymentResponse doProcessPayment(UUID paymentId, PostPaymentRequest paymentRequest) {
     Optional<String> validationError = validator.validate(paymentRequest);
     if (validationError.isPresent()) {
       LOG.info("Payment {} rejected: {}", paymentId, validationError.get());
+      meterRegistry.counter("payments.processed", "status", PaymentStatus.REJECTED.getName()).increment();
       return buildAndStore(paymentId, paymentRequest, PaymentStatus.REJECTED, validationError.get());
     }
 
@@ -66,6 +85,7 @@ public class PaymentGatewayService {
     BankPaymentResponse bankResponse = bankClient.processPayment(bankRequest);
     PaymentStatus status = bankResponse.authorized() ? PaymentStatus.AUTHORIZED : PaymentStatus.DECLINED;
     LOG.info("Payment {} {}", paymentId, status.getName());
+    meterRegistry.counter("payments.processed", "status", status.getName()).increment();
 
     return buildAndStore(paymentId, paymentRequest, status, null);
   }
