@@ -88,7 +88,7 @@ class PaymentGatewayIntegrationTest {
     wireMock.stubFor(post(urlEqualTo("/payments"))
         .willReturn(okJson("{\"authorized\":true,\"authorization_code\":\"auth-123\"}")));
 
-    given()
+    String id = given()
         .contentType(ContentType.JSON)
         .body(validPaymentRequest())
     .when()
@@ -100,7 +100,11 @@ class PaymentGatewayIntegrationTest {
         .body("cardNumberLastFour", is("8877"))
         .body("currency", is("GBP"))
         .body("amount", is(100))
-        .body("message", nullValue());
+        .body("message", nullValue())
+        .extract().path("id");
+
+    given().when().get("/payments/" + id)
+        .then().statusCode(200).body("status", is("Authorized"));
   }
 
   @Test
@@ -108,7 +112,7 @@ class PaymentGatewayIntegrationTest {
     wireMock.stubFor(post(urlEqualTo("/payments"))
         .willReturn(okJson("{\"authorized\":false,\"authorization_code\":\"\"}")));
 
-    given()
+    String id = given()
         .contentType(ContentType.JSON)
         .body(validPaymentRequest())
     .when()
@@ -116,12 +120,18 @@ class PaymentGatewayIntegrationTest {
     .then()
         .statusCode(200)
         .body("status", is("Declined"))
-        .body("message", nullValue());
+        .body("message", nullValue())
+        .extract().path("id");
+
+    given().when().get("/payments/" + id)
+        .then().statusCode(200).body("status", is("Declined"));
   }
 
   @Test
   void shouldReturn400WithRejectedStatusWhenValidationFails() {
-    given()
+    // Rejected payments are assigned a UUID and persisted so merchants can retrieve the
+    // outcome by ID for auditing — even though the bank was never called.
+    String id = given()
         .contentType(ContentType.JSON)
         .body("""
             {
@@ -138,15 +148,18 @@ class PaymentGatewayIntegrationTest {
     .then()
         .statusCode(400)
         .body("status", is("Rejected"))
-        .body("message", notNullValue());
+        .body("message", notNullValue())
+        .extract().path("id");
 
-    // Bank must never be called when the gateway rejects the request
     wireMock.verify(0, postRequestedFor(urlEqualTo("/payments")));
+
+    given().when().get("/payments/" + id)
+        .then().statusCode(200).body("status", is("Rejected"));
   }
 
   @Test
   void shouldReturn400WithRejectedStatusWhenCardIsExpired() {
-    given()
+    String id = given()
         .contentType(ContentType.JSON)
         .body("""
             {
@@ -163,9 +176,13 @@ class PaymentGatewayIntegrationTest {
     .then()
         .statusCode(400)
         .body("status", is("Rejected"))
-        .body("message", notNullValue());
+        .body("message", notNullValue())
+        .extract().path("id");
 
     wireMock.verify(0, postRequestedFor(urlEqualTo("/payments")));
+
+    given().when().get("/payments/" + id)
+        .then().statusCode(200).body("status", is("Rejected"));
   }
 
   @Test
@@ -215,13 +232,20 @@ class PaymentGatewayIntegrationTest {
     wireMock.stubFor(post(urlEqualTo("/payments"))
         .willReturn(okJson("{\"authorized\":true,\"authorization_code\":\"auth-123\"}")));
 
-    given()
+    String id = given()
         .contentType(ContentType.JSON)
         .body(validPaymentRequest())
     .when()
         .post("/payments")
     .then()
         .statusCode(200)
+        .body("cardNumberLastFour", is("8877"))
+        .body("cardNumberLastFour", instanceOf(String.class))
+        .extract().path("id");
+
+    // Also verify the string type survives the repository round-trip
+    given().when().get("/payments/" + id)
+        .then().statusCode(200)
         .body("cardNumberLastFour", is("8877"))
         .body("cardNumberLastFour", instanceOf(String.class));
   }
