@@ -10,14 +10,15 @@ import static org.mockito.Mockito.when;
 import com.checkout.payment.gateway.client.BankClient;
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.BankUnavailableException;
-import com.checkout.payment.gateway.exception.EventProcessingException;
+import com.checkout.payment.gateway.exception.PaymentNotFoundException;
 import com.checkout.payment.gateway.model.BankPaymentRequest;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PaymentResponse;
-import com.checkout.payment.gateway.repository.PaymentsRepository;
+import com.checkout.payment.gateway.repository.PaymentRepository;
 import com.checkout.payment.gateway.validation.PaymentRequestValidator;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.YearMonth;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -30,7 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class PaymentGatewayServiceTest {
 
-  @Mock private PaymentsRepository paymentsRepository;
+  @Mock private PaymentRepository paymentRepository;
   @Mock private BankClient bankClient;
   @Mock private PaymentRequestValidator validator;
 
@@ -38,14 +39,14 @@ class PaymentGatewayServiceTest {
 
   @BeforeEach
   void setUp() {
-    service = new PaymentGatewayService(paymentsRepository, bankClient, validator, new SimpleMeterRegistry());
+    service = new PaymentGatewayService(paymentRepository, bankClient, validator, new SimpleMeterRegistry());
   }
 
   private PostPaymentRequest requestFor(String cardNumber) {
     PostPaymentRequest request = new PostPaymentRequest();
     request.setCardNumber(cardNumber);
     request.setExpiryMonth(12);
-    request.setExpiryYear(2027);
+    request.setExpiryYear(YearMonth.now().plusYears(1).getYear());
     request.setCurrency("GBP");
     request.setAmount(100);
     request.setCvv("123");
@@ -103,7 +104,7 @@ class PaymentGatewayServiceTest {
     service.processPayment(request);
 
     ArgumentCaptor<PaymentResponse> captor = ArgumentCaptor.forClass(PaymentResponse.class);
-    verify(paymentsRepository).add(captor.capture());
+    verify(paymentRepository).add(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(PaymentStatus.REJECTED);
   }
 
@@ -165,17 +166,17 @@ class PaymentGatewayServiceTest {
 
     PaymentResponse response = service.processPayment(request);
 
-    assertThat(response.getCardNumberLastFour()).isEqualTo(8877);
+    assertThat(response.getCardNumberLastFour()).isEqualTo("8877");
   }
 
   @Test
-  void shouldDefaultCardNumberLastFourToZeroWhenCardNumberIsInvalid() {
+  void shouldReturnNullCardNumberLastFourWhenCardNumberIsInvalid() {
     PostPaymentRequest request = requestFor("abc");
     when(validator.validate(request)).thenReturn(Optional.of("card_number must be 14-19 numeric characters"));
 
     PaymentResponse response = service.processPayment(request);
 
-    assertThat(response.getCardNumberLastFour()).isEqualTo(0);
+    assertThat(response.getCardNumberLastFour()).isNull();
   }
 
   @Test
@@ -187,7 +188,7 @@ class PaymentGatewayServiceTest {
     service.processPayment(request);
 
     ArgumentCaptor<PaymentResponse> captor = ArgumentCaptor.forClass(PaymentResponse.class);
-    verify(paymentsRepository).add(captor.capture());
+    verify(paymentRepository).add(captor.capture());
     assertThat(captor.getValue().getStatus()).isEqualTo(PaymentStatus.DECLINED);
   }
 
@@ -197,7 +198,7 @@ class PaymentGatewayServiceTest {
   void shouldFormatExpiryDateAsMmYyyyInBankRequest() {
     PostPaymentRequest request = requestFor("2222405343248877");
     request.setExpiryMonth(12);
-    request.setExpiryYear(2027);
+    request.setExpiryYear(YearMonth.now().plusYears(1).getYear());
     when(validator.validate(request)).thenReturn(Optional.empty());
     when(bankClient.processPayment(any())).thenReturn(new BankPaymentResponse(true, "auth-code"));
 
@@ -205,14 +206,14 @@ class PaymentGatewayServiceTest {
 
     ArgumentCaptor<BankPaymentRequest> captor = ArgumentCaptor.forClass(BankPaymentRequest.class);
     verify(bankClient).processPayment(captor.capture());
-    assertThat(captor.getValue().expiryDate()).isEqualTo("12/2027");
+    assertThat(captor.getValue().expiryDate()).isEqualTo("12/" + YearMonth.now().plusYears(1).getYear());
   }
 
   @Test
   void shouldZeroPadSingleDigitMonthInBankRequest() {
     PostPaymentRequest request = requestFor("2222405343248877");
     request.setExpiryMonth(4);
-    request.setExpiryYear(2027);
+    request.setExpiryYear(YearMonth.now().plusYears(1).getYear());
     when(validator.validate(request)).thenReturn(Optional.empty());
     when(bankClient.processPayment(any())).thenReturn(new BankPaymentResponse(true, "auth-code"));
 
@@ -220,7 +221,7 @@ class PaymentGatewayServiceTest {
 
     ArgumentCaptor<BankPaymentRequest> captor = ArgumentCaptor.forClass(BankPaymentRequest.class);
     verify(bankClient).processPayment(captor.capture());
-    assertThat(captor.getValue().expiryDate()).isEqualTo("04/2027");
+    assertThat(captor.getValue().expiryDate()).isEqualTo("04/" + YearMonth.now().plusYears(1).getYear());
   }
 
   // --- processPayment: storage ---
@@ -234,7 +235,7 @@ class PaymentGatewayServiceTest {
     PaymentResponse response = service.processPayment(request);
 
     ArgumentCaptor<PaymentResponse> captor = ArgumentCaptor.forClass(PaymentResponse.class);
-    verify(paymentsRepository).add(captor.capture());
+    verify(paymentRepository).add(captor.capture());
     assertThat(captor.getValue()).isSameAs(response);
   }
 
@@ -255,18 +256,19 @@ class PaymentGatewayServiceTest {
   @Test
   void shouldReturnPaymentWhenFoundById() {
     UUID id = UUID.randomUUID();
-    PaymentResponse stored = new PaymentResponse(id, PaymentStatus.AUTHORIZED, 8877, 12, 2027, "GBP", 100, null);
-    when(paymentsRepository.get(id)).thenReturn(Optional.of(stored));
+    PaymentResponse stored = new PaymentResponse(id, PaymentStatus.AUTHORIZED, "8877", 12,
+        YearMonth.now().plusYears(1).getYear(), "GBP", 100, null);
+    when(paymentRepository.get(id)).thenReturn(Optional.of(stored));
 
     assertThat(service.getPaymentById(id)).isSameAs(stored);
   }
 
   @Test
-  void shouldThrowEventProcessingExceptionWhenPaymentNotFound() {
+  void shouldThrowPaymentNotFoundExceptionWhenPaymentNotFound() {
     UUID id = UUID.randomUUID();
-    when(paymentsRepository.get(id)).thenReturn(Optional.empty());
+    when(paymentRepository.get(id)).thenReturn(Optional.empty());
 
     assertThatThrownBy(() -> service.getPaymentById(id))
-        .isInstanceOf(EventProcessingException.class);
+        .isInstanceOf(PaymentNotFoundException.class);
   }
 }

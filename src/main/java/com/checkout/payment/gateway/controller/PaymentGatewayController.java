@@ -12,6 +12,8 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,8 +23,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
 @Tag(name = "Payments", description = "Process card payments and retrieve payment details")
-@RestController("api")
+@RestController
 public class PaymentGatewayController {
+
+  private static final Logger LOG = LoggerFactory.getLogger(PaymentGatewayController.class);
 
   private final PaymentGatewayService paymentGatewayService;
 
@@ -33,12 +37,15 @@ public class PaymentGatewayController {
   @Operation(summary = "Retrieve a payment by ID")
   @ApiResponses({
       @ApiResponse(responseCode = "200", description = "Payment found"),
+      @ApiResponse(responseCode = "400", description = "Invalid payment ID format (not a UUID)",
+          content = @Content(schema = @Schema(implementation = ErrorResponse.class))),
       @ApiResponse(responseCode = "404", description = "Payment not found",
           content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   })
-  @GetMapping("/payment/{id}")
-  public ResponseEntity<PaymentResponse> getPostPaymentEventById(@PathVariable UUID id) {
-    return new ResponseEntity<>(paymentGatewayService.getPaymentById(id), HttpStatus.OK);
+  @GetMapping("/payments/{id}")
+  public ResponseEntity<PaymentResponse> getPaymentById(@PathVariable UUID id) {
+    LOG.info("GET /payments/{}", id);
+    return ResponseEntity.ok(paymentGatewayService.getPaymentById(id));
   }
 
   @Operation(summary = "Process a new card payment",
@@ -47,12 +54,14 @@ public class PaymentGatewayController {
           + "Returns 502 if the bank is temporarily unavailable.")
   @ApiResponses({
       @ApiResponse(responseCode = "200", description = "Payment authorized or declined by the bank"),
-      @ApiResponse(responseCode = "400", description = "Payment rejected due to validation failure"),
+      @ApiResponse(responseCode = "400", description = "Payment rejected due to validation failure",
+          content = @Content(schema = @Schema(implementation = PaymentResponse.class))),
       @ApiResponse(responseCode = "502", description = "Bank unavailable",
           content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
   })
-  @PostMapping("/payment")
+  @PostMapping("/payments")
   public ResponseEntity<PaymentResponse> processPayment(@RequestBody PostPaymentRequest request) {
+    LOG.info("POST /payments {}", request);
     PaymentResponse response = paymentGatewayService.processPayment(request);
     HttpStatus status = response.getStatus() == PaymentStatus.REJECTED
         ? HttpStatus.BAD_REQUEST

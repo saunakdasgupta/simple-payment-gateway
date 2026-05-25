@@ -9,7 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.checkout.payment.gateway.enums.PaymentStatus;
 import com.checkout.payment.gateway.exception.BankUnavailableException;
-import com.checkout.payment.gateway.exception.EventProcessingException;
+import com.checkout.payment.gateway.exception.PaymentNotFoundException;
 import com.checkout.payment.gateway.model.PaymentResponse;
 import com.checkout.payment.gateway.service.PaymentGatewayService;
 import java.util.UUID;
@@ -30,14 +30,14 @@ class PaymentGatewayControllerTest {
 
   @Test
   void whenPaymentWithIdExistThenCorrectPaymentIsReturned() throws Exception {
-    PaymentResponse payment = buildResponse(UUID.randomUUID(), PaymentStatus.AUTHORIZED, 8877, null);
+    PaymentResponse payment = buildResponse(UUID.randomUUID(), PaymentStatus.AUTHORIZED, "8877", null);
     when(paymentGatewayService.getPaymentById(payment.getId())).thenReturn(payment);
 
-    mvc.perform(get("/payment/" + payment.getId()))
+    mvc.perform(get("/payments/" + payment.getId()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.id").value(payment.getId().toString()))
         .andExpect(jsonPath("$.status").value("Authorized"))
-        .andExpect(jsonPath("$.cardNumberLastFour").value(8877))
+        .andExpect(jsonPath("$.cardNumberLastFour").value("8877"))
         .andExpect(jsonPath("$.expiryMonth").value(12))
         .andExpect(jsonPath("$.expiryYear").value(2027))
         .andExpect(jsonPath("$.currency").value("GBP"))
@@ -47,16 +47,16 @@ class PaymentGatewayControllerTest {
   @Test
   void whenPaymentWithIdDoesNotExistThen404IsReturned() throws Exception {
     UUID id = UUID.randomUUID();
-    when(paymentGatewayService.getPaymentById(id)).thenThrow(new EventProcessingException("Payment not found"));
+    when(paymentGatewayService.getPaymentById(id)).thenThrow(new PaymentNotFoundException("Payment not found"));
 
-    mvc.perform(get("/payment/" + id))
+    mvc.perform(get("/payments/" + id))
         .andExpect(status().isNotFound())
         .andExpect(jsonPath("$.message").value("Payment not found"));
   }
 
   @Test
   void shouldReturn400WhenPaymentIdIsNotAValidUuid() throws Exception {
-    mvc.perform(get("/payment/not-a-uuid"))
+    mvc.perform(get("/payments/not-a-uuid"))
         .andExpect(status().isBadRequest());
   }
 
@@ -65,15 +65,15 @@ class PaymentGatewayControllerTest {
   @Test
   void shouldReturn200WhenPaymentIsAuthorized() throws Exception {
     when(paymentGatewayService.processPayment(any()))
-        .thenReturn(buildResponse(UUID.randomUUID(), PaymentStatus.AUTHORIZED, 8877, null));
+        .thenReturn(buildResponse(UUID.randomUUID(), PaymentStatus.AUTHORIZED, "8877", null));
 
-    mvc.perform(post("/payment")
+    mvc.perform(post("/payments")
             .contentType(MediaType.APPLICATION_JSON)
             .content(validPaymentRequest()))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("Authorized"))
         .andExpect(jsonPath("$.id").isNotEmpty())
-        .andExpect(jsonPath("$.cardNumberLastFour").value(8877))
+        .andExpect(jsonPath("$.cardNumberLastFour").value("8877"))
         .andExpect(jsonPath("$.message").doesNotExist());
   }
 
@@ -82,9 +82,9 @@ class PaymentGatewayControllerTest {
   @Test
   void shouldReturn200WhenPaymentIsDeclined() throws Exception {
     when(paymentGatewayService.processPayment(any()))
-        .thenReturn(buildResponse(UUID.randomUUID(), PaymentStatus.DECLINED, 8872, null));
+        .thenReturn(buildResponse(UUID.randomUUID(), PaymentStatus.DECLINED, "8872", null));
 
-    mvc.perform(post("/payment")
+    mvc.perform(post("/payments")
             .contentType(MediaType.APPLICATION_JSON)
             .content(validPaymentRequest()))
         .andExpect(status().isOk())
@@ -98,9 +98,9 @@ class PaymentGatewayControllerTest {
   void shouldReturn400WhenPaymentIsRejected() throws Exception {
     String reason = "card_number must be 14-19 numeric characters";
     when(paymentGatewayService.processPayment(any()))
-        .thenReturn(buildResponse(UUID.randomUUID(), PaymentStatus.REJECTED, 0, reason));
+        .thenReturn(buildResponse(UUID.randomUUID(), PaymentStatus.REJECTED, null, reason));
 
-    mvc.perform(post("/payment")
+    mvc.perform(post("/payments")
             .contentType(MediaType.APPLICATION_JSON)
             .content(validPaymentRequest()))
         .andExpect(status().isBadRequest())
@@ -112,7 +112,7 @@ class PaymentGatewayControllerTest {
 
   @Test
   void shouldReturn400WhenRequestBodyIsMissing() throws Exception {
-    mvc.perform(post("/payment")
+    mvc.perform(post("/payments")
             .contentType(MediaType.APPLICATION_JSON))
         .andExpect(status().isBadRequest());
   }
@@ -124,14 +124,14 @@ class PaymentGatewayControllerTest {
     when(paymentGatewayService.processPayment(any()))
         .thenThrow(new BankUnavailableException("Bank down"));
 
-    mvc.perform(post("/payment")
+    mvc.perform(post("/payments")
             .contentType(MediaType.APPLICATION_JSON)
             .content(validPaymentRequest()))
         .andExpect(status().isBadGateway())
         .andExpect(jsonPath("$.message").isNotEmpty());
   }
 
-  private PaymentResponse buildResponse(UUID id, PaymentStatus status, int lastFour,
+  private PaymentResponse buildResponse(UUID id, PaymentStatus status, String lastFour,
       String message) {
     return new PaymentResponse(id, status, lastFour, 12, 2027, "GBP", 100, message);
   }

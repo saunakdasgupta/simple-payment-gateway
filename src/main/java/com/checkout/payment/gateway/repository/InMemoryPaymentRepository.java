@@ -8,16 +8,17 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Repository;
 
 @Repository
-public class PaymentsRepository {
+public class InMemoryPaymentRepository implements PaymentRepository {
 
   private final Map<UUID, PaymentResponse> payments = new ConcurrentHashMap<>();
 
+  @Override
   public void add(PaymentResponse payment) {
     payments.put(payment.getId(), payment);
   }
 
+  @Override
   public Optional<PaymentResponse> get(UUID id) {
     return Optional.ofNullable(payments.get(id));
   }
-
 }

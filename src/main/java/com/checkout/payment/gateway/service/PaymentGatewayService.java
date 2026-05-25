@@ -2,12 +2,12 @@ package com.checkout.payment.gateway.service;
 
 import com.checkout.payment.gateway.client.BankClient;
 import com.checkout.payment.gateway.enums.PaymentStatus;
-import com.checkout.payment.gateway.exception.EventProcessingException;
+import com.checkout.payment.gateway.exception.PaymentNotFoundException;
 import com.checkout.payment.gateway.model.BankPaymentRequest;
 import com.checkout.payment.gateway.model.BankPaymentResponse;
 import com.checkout.payment.gateway.model.PostPaymentRequest;
 import com.checkout.payment.gateway.model.PaymentResponse;
-import com.checkout.payment.gateway.repository.PaymentsRepository;
+import com.checkout.payment.gateway.repository.PaymentRepository;
 import com.checkout.payment.gateway.validation.PaymentRequestValidator;
 import io.micrometer.core.instrument.MeterRegistry;
 import java.util.Optional;
@@ -22,16 +22,16 @@ public class PaymentGatewayService {
 
   private static final Logger LOG = LoggerFactory.getLogger(PaymentGatewayService.class);
 
-  private final PaymentsRepository paymentsRepository;
+  private final PaymentRepository paymentRepository;
   private final BankClient bankClient;
   private final PaymentRequestValidator validator;
   private final MeterRegistry meterRegistry;
 
-  public PaymentGatewayService(PaymentsRepository paymentsRepository,
+  public PaymentGatewayService(PaymentRepository paymentRepository,
       BankClient bankClient,
       PaymentRequestValidator validator,
       MeterRegistry meterRegistry) {
-    this.paymentsRepository = paymentsRepository;
+    this.paymentRepository = paymentRepository;
     this.bankClient = bankClient;
     this.validator = validator;
     this.meterRegistry = meterRegistry;
@@ -41,9 +41,9 @@ public class PaymentGatewayService {
     MDC.put("paymentId", id.toString());
     try {
       LOG.info("Retrieving payment with ID {}", id);
-      return paymentsRepository.get(id).orElseThrow(() -> {
+      return paymentRepository.get(id).orElseThrow(() -> {
         LOG.warn("Payment not found for ID: {}", id);
-        return new EventProcessingException("Payment not found");
+        return new PaymentNotFoundException("Payment not found");
       });
     } finally {
       MDC.remove("paymentId");
@@ -95,21 +95,14 @@ public class PaymentGatewayService {
     PaymentResponse response = new PaymentResponse(
         paymentId,
         status,
-        safeLastFour(request.getCardNumber()),
+        request.getCardNumberLastFour(),  // card masking logic moved to PostPaymentRequest
         request.getExpiryMonth(),
         request.getExpiryYear(),
         request.getCurrency(),
         request.getAmount(),
         message
     );
-    paymentsRepository.add(response);
+    paymentRepository.add(response);
     return response;
-  }
-
-  private int safeLastFour(String cardNumber) {
-    if (cardNumber != null && cardNumber.matches("\\d+") && cardNumber.length() >= 4) {
-      return Integer.parseInt(cardNumber.substring(cardNumber.length() - 4));
-    }
-    return 0;
   }
 }

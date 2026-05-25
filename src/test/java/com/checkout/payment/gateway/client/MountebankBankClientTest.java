@@ -87,4 +87,15 @@ class MountebankBankClientTest {
         .isInstanceOf(BankUnavailableException.class)
         .hasMessageContaining("empty response");
   }
+
+  @Test
+  void shouldThrowBankUnavailableExceptionWhenBankReturns500() {
+    doThrow(HttpServerErrorException.create(
+            HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", null, null, null))
+        .when(restTemplate).postForObject(any(String.class), any(), eq(BankPaymentResponse.class));
+
+    assertThatThrownBy(() -> client.processPayment(anyRequest))
+        .isInstanceOf(BankUnavailableException.class)
+        .hasMessageContaining("unavailable");
+  }
 }

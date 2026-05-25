@@ -34,8 +34,8 @@ public class MountebankBankClient implements BankClient {
         throw new BankUnavailableException("Bank returned an empty response");
       }
       return response;
-    } catch (HttpServerErrorException.ServiceUnavailable e) {
-      LOG.warn("Bank unavailable at {}", bankSimulatorUrl);
+    } catch (HttpServerErrorException e) {
+      LOG.warn("Bank returned {} from {}", e.getStatusCode(), bankSimulatorUrl);
       throw new BankUnavailableException("Bank is currently unavailable");
     }
   }

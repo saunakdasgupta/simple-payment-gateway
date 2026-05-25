@@ -2,10 +2,9 @@ package com.checkout.payment.gateway.model;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.swagger.v3.oas.annotations.media.Schema;
-import java.io.Serializable;
 
 @Schema(description = "Card payment request")
-public class PostPaymentRequest implements Serializable {
+public class PostPaymentRequest {
 
   @Schema(description = "Full card number", example = "2222405343248877",
       minLength = 14, maxLength = 19)
@@ -29,6 +28,18 @@ public class PostPaymentRequest implements Serializable {
 
   @Schema(description = "Card security code (3–4 numeric characters)", example = "123")
   private String cvv;
+
+  /**
+   * Returns the last four digits of the card number as a zero-padded string,
+   * or null if the card number is null, non-numeric, or fewer than 4 characters.
+   * Belongs here rather than in the service — card masking is a card number concern.
+   */
+  public String getCardNumberLastFour() {
+    if (cardNumber != null && cardNumber.matches("\\d+") && cardNumber.length() >= 4) {
+      return cardNumber.substring(cardNumber.length() - 4);
+    }
+    return null;
+  }
 
   public String getCardNumber() {
     return cardNumber;
