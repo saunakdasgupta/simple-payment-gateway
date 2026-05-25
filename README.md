@@ -48,7 +48,7 @@ Metrics (Prometheus): `http://localhost:8090/actuator/prometheus`
 ### Process a Payment
 
 ```
-POST /payment
+POST /payments
 ```
 
 Request body:
@@ -70,7 +70,7 @@ Response (200 OK — Authorized or Declined):
 {
   "id": "8f433a5a-4317-457f-8bb6-876eeb6c9968",
   "status": "Authorized",
-  "cardNumberLastFour": 8877,
+  "cardNumberLastFour": "8877",
   "expiryMonth": 4,
   "expiryYear": 2026,
   "currency": "GBP",
@@ -84,18 +84,18 @@ Response (400 Bad Request — Rejected due to validation failure):
 {
   "id": "3c1a5b2d-...",
   "status": "Rejected",
-  "cardNumberLastFour": 0,
-  "expiryMonth": 0,
-  "expiryYear": 0,
-  "currency": null,
-  "amount": 0
+  "expiryMonth": 4,
+  "expiryYear": 2026,
+  "currency": "GBP",
+  "amount": 100,
+  "message": "card_number must be 14-19 numeric characters"
 }
 ```
 
 ### Retrieve a Payment
 
 ```
-GET /payment/{id}
+GET /payments/{id}
 ```
 
 Returns the stored payment response by UUID (200 OK), or 404 if not found.
@@ -109,11 +109,11 @@ Returns the stored payment response by UUID (200 OK), or 404 if not found.
 | Authorized or Declined | 200 | The request was valid and processed |
 | Rejected (validation failure) | 400 | The request was malformed; merchant should fix input |
 | Payment ID not found | 404 | Standard REST convention |
-| Bank unavailable (503 from bank) | 502 | Gateway acts as proxy; upstream failure maps to Bad Gateway |
+| Bank unavailable (5xx from bank) | 502 | Gateway acts as proxy; upstream failure maps to Bad Gateway |
 
 ### Rejected Payments Are Stored
 
-Rejected payments are assigned a UUID and persisted with `status: "Rejected"`. This allows merchants to retrieve the outcome by ID for auditing or debugging. `cardNumberLastFour` defaults to `0` when the card number itself is invalid (null, non-numeric, or fewer than 4 characters).
+Rejected payments are assigned a UUID and persisted with `status: "Rejected"`. This allows merchants to retrieve the outcome by ID for auditing or debugging. `cardNumberLastFour` is omitted from the response when the card number itself is invalid (null, non-numeric, or fewer than 4 characters).
 
 ### Card Number Handling
 
@@ -125,7 +125,7 @@ CVV is accepted as a string to correctly handle values with leading zeros (e.g.,
 
 ### Transaction Direction
 
-`POST /payment` exclusively represents a **debit (capture)** — the customer is paying the merchant and money is being taken from the customer's account. There is no credit/refund operation in this implementation.
+`POST /payments` exclusively represents a **debit (capture)** — the customer is paying the merchant and money is being taken from the customer's account. There is no credit/refund operation in this implementation.
 
 In a full payment gateway, a refund would be a separate endpoint (e.g. `POST /payments/{id}/refunds`) with its own request model and flow. That is out of scope for this challenge.
 
@@ -150,13 +150,13 @@ All validation is fail-fast: the first failing rule causes an immediate `Rejecte
 
 ### Bank Communication
 
-The gateway calls the acquiring bank at `bank.simulator.url` (configured in `application.properties`). The expiry date is formatted as `MM/YYYY` (zero-padded month) for the bank request. A `503` from the bank is surfaced as `502 Bad Gateway` to the merchant.
+The gateway calls the acquiring bank at `bank.simulator.url` (configured in `application.properties`). The expiry date is formatted as `MM/YYYY` (zero-padded month) for the bank request. Any 5xx response from the bank is surfaced as `502 Bad Gateway` to the merchant.
 
 ### In-Memory Storage
 
-Payments are stored in a `HashMap` keyed by UUID. This is intentionally simple for the scope of this challenge. In production, this would be replaced with a persistent store (e.g., PostgreSQL for durability) and a distributed cache (e.g., Redis) for horizontal scaling.
+Payments are stored in a `ConcurrentHashMap` keyed by UUID. This is intentionally simple for the scope of this challenge. In production, this would be replaced with a persistent store (e.g., PostgreSQL for durability) and a distributed cache (e.g., Redis) for horizontal scaling.
 
-With an external database, `GET /payment/{id}` would introduce an additional failure surface beyond "not found" — connection failures, timeouts, and transient errors. These must be handled as a distinct error category and must not be conflated with the payment's own `message` field (which carries the rejection reason set at processing time and should never be modified after). A `PaymentRepositoryException` mapped to `503 Service Unavailable` via `CommonExceptionHandler` would be the appropriate pattern, keeping business outcomes and infrastructure failures in separate response types.
+With an external database, `GET /payments/{id}` would introduce an additional failure surface beyond "not found" — connection failures, timeouts, and transient errors. These must be handled as a distinct error category and must not be conflated with the payment's own `message` field (which carries the rejection reason set at processing time and should never be modified after). A `PaymentRepositoryException` mapped to `503 Service Unavailable` via `CommonExceptionHandler` would be the appropriate pattern, keeping business outcomes and infrastructure failures in separate response types.
 
 ### RestTemplate
 
@@ -166,13 +166,15 @@ With an external database, `GET /payment/{id}` would introduce an additional fai
 
 ### Health Endpoints
 
-A custom `BankSimulatorHealthIndicator` probes the acquiring bank on every health check. The app uses a custom `DEGRADED` status (HTTP 200) when the bank is unreachable — the gateway is still alive and can serve `GET /payment/{id}` requests, so it should not be removed from the load balancer.
+A custom `BankSimulatorHealthIndicator` probes the acquiring bank on every health check. The app uses a custom `DEGRADED` status (HTTP 200) when the bank is unreachable — the gateway is still alive and can serve `GET /payments/{id}` requests, so it should not be removed from the load balancer.
 
 | Endpoint | Bank down → | K8s action |
 |---|---|---|
 | `/actuator/health` | `DEGRADED` (HTTP 200) | Monitoring alert |
 | `/actuator/health/liveness` | `UP` | No restart |
 | `/actuator/health/readiness` | `UP` | Keep routing traffic |
+
+A Resilience4J circuit breaker protects the health probe: after three consecutive connection failures the circuit opens, and subsequent health checks fast-fail without attempting to reach the bank. The circuit transitions back to closed once the bank recovers.
 
 ### Metrics
 
@@ -194,17 +196,20 @@ Spring Boot auto-instruments `http.server.requests` (request count, latency, HTT
 
 ### Log Correlation
 
-Every log statement produced during a payment request carries the payment UUID via MDC (`paymentId`). This includes logs from all classes in the call chain — the service, `MountebankBankClient`, and `CommonExceptionHandler` — without passing the ID through method signatures.
+Requests carry two correlation IDs in MDC:
 
-Log format: `HH:mm:ss.SSS LEVEL [<paymentId>] logger - message`
+- `requestId` — a UUID assigned by `RequestCorrelationFilter` at the HTTP boundary, before any Spring processing. Covers log lines emitted before the payment ID is known (e.g., Jackson parse failures, Spring validation errors).
+- `paymentId` — the UUID of the payment being processed, set by the service as soon as one is assigned.
+
+Log format: `HH:mm:ss.SSS LEVEL [<requestId>][<paymentId>] logger - message`
 
 ```
-10:14:05.001 INFO  [3c1a5b2d-4317-457f-8bb6-876eeb6c9968] PaymentGatewayService - Processing payment 3c1a5b2d...
-10:14:05.042 WARN  [3c1a5b2d-4317-457f-8bb6-876eeb6c9968] MountebankBankClient  - Bank unavailable at http://localhost:8080
-10:14:05.043 WARN  [3c1a5b2d-4317-457f-8bb6-876eeb6c9968] CommonExceptionHandler - Bank unavailable: Bank is currently unavailable
+10:14:05.001 INFO  [a1b2c3d4-...][3c1a5b2d-...] PaymentGatewayService - Processing payment 3c1a5b2d...
+10:14:05.042 WARN  [a1b2c3d4-...][3c1a5b2d-...] MountebankBankClient  - Bank returned 503 from http://localhost:8080
+10:14:05.043 WARN  [a1b2c3d4-...][3c1a5b2d-...] CommonExceptionHandler - Bank unavailable: Bank is currently unavailable
 ```
 
-Non-payment logs (startup, health checks) leave the `paymentId` slot empty.
+Non-payment logs (startup, health checks) leave both slots empty: `[][]`.
 
 ## Production Considerations
 
@@ -212,43 +217,48 @@ The following are out of scope for this challenge but would be required in a pro
 
 ### Idempotency
 
-`POST /payment` is not idempotent. A merchant whose HTTP client times out and retries will submit a second payment request that the bank treats as a new transaction, potentially charging the customer twice.
+`POST /payments` is not idempotent. A merchant whose HTTP client times out and retries will submit a second payment request that the bank treats as a new transaction, potentially charging the customer twice.
 
 The standard solution is a client-supplied `Idempotency-Key` header. The gateway stores the key-to-response mapping (e.g., in Redis with a 24-hour TTL) and returns the cached response on replay without calling the bank. Concurrent requests with the same key require a distributed lock to prevent both reaching the bank before the first response is stored.
 
 ### Thread Safety
 
-`PaymentsRepository` uses a `ConcurrentHashMap` to handle concurrent writes safely. In production this is replaced by a persistent store, but the in-memory implementation is thread-safe for the scope of this challenge.
+`InMemoryPaymentRepository` uses a `ConcurrentHashMap` to handle concurrent writes safely. In production this is replaced by a persistent store, but the in-memory implementation is thread-safe for the scope of this challenge.
 
 ### Persistent Storage
 
-Payments are stored in a `HashMap` that is lost on restart. In production this would be replaced with a persistent store (e.g., PostgreSQL) and a distributed cache (e.g., Redis) for horizontal scaling across multiple instances.
+Payments are stored in a `ConcurrentHashMap` that is lost on restart. In production this would be replaced with a persistent store (e.g., PostgreSQL) and a distributed cache (e.g., Redis) for horizontal scaling across multiple instances.
 
 ## Project Structure
 
 ```
 src/main/java/com/checkout/payment/gateway/
 ├── client/
-│   ├── BankClient.java                 interface — decouples service from HTTP transport
-│   └── MountebankBankClient.java       RestTemplate implementation
+│   ├── BankClient.java                    interface — decouples service from HTTP transport
+│   └── MountebankBankClient.java          RestTemplate implementation
 ├── configuration/
-│   └── ApplicationConfiguration.java  RestTemplate bean with timeouts
+│   └── ApplicationConfiguration.java      RestTemplate bean with timeouts
 ├── controller/
 │   └── PaymentGatewayController.java
 ├── enums/
 │   └── PaymentStatus.java
 ├── exception/
 │   ├── BankUnavailableException.java
-│   ├── CommonExceptionHandler.java     @ControllerAdvice
-│   └── EventProcessingException.java
+│   ├── CommonExceptionHandler.java        @ControllerAdvice
+│   └── PaymentNotFoundException.java
+├── filter/
+│   └── RequestCorrelationFilter.java      assigns requestId to MDC at the HTTP boundary
+├── health/
+│   └── BankSimulatorHealthIndicator.java  custom health indicator with circuit breaker
 ├── model/
-│   ├── BankPaymentRequest.java         sent to acquiring bank
-│   ├── BankPaymentResponse.java        received from acquiring bank
+│   ├── BankPaymentRequest.java            sent to acquiring bank
+│   ├── BankPaymentResponse.java           received from acquiring bank
 │   ├── ErrorResponse.java
-│   ├── PostPaymentRequest.java         merchant POST request
-│   └── PostPaymentResponse.java        merchant response (GET and POST)
+│   ├── PaymentResponse.java               merchant response (GET and POST)
+│   └── PostPaymentRequest.java            merchant POST request
 ├── repository/
-│   └── PaymentsRepository.java         in-memory HashMap
+│   ├── InMemoryPaymentRepository.java     ConcurrentHashMap implementation
+│   └── PaymentRepository.java             interface — decouples service from storage
 ├── service/
 │   └── PaymentGatewayService.java
 ├── validation/

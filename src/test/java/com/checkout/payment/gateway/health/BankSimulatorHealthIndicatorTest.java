@@ -7,6 +7,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -86,7 +87,7 @@ class BankSimulatorHealthIndicatorTest {
   @Test
   void shouldReturnDegradedImmediatelyWhenCircuitIsOpen() {
     // Force circuit open by recording enough failures
-    var circuitBreaker = circuitBreakerRegistry.circuitBreaker("bankSimulator");
+    CircuitBreaker circuitBreaker = circuitBreakerRegistry.circuitBreaker("bankSimulator");
     // The default sliding window is 100; use transitionToOpenState() to open it directly
     circuitBreaker.transitionToOpenState();
 
