@@ -54,6 +54,12 @@ class PaymentGatewayControllerTest {
         .andExpect(jsonPath("$.message").value("Payment not found"));
   }
 
+  @Test
+  void shouldReturn400WhenPaymentIdIsNotAValidUuid() throws Exception {
+    mvc.perform(get("/payment/not-a-uuid"))
+        .andExpect(status().isBadRequest());
+  }
+
   // --- POST: authorized ---
 
   @Test
@@ -100,6 +106,15 @@ class PaymentGatewayControllerTest {
         .andExpect(status().isBadRequest())
         .andExpect(jsonPath("$.status").value("Rejected"))
         .andExpect(jsonPath("$.message").value(reason));
+  }
+
+  // --- POST: missing body ---
+
+  @Test
+  void shouldReturn400WhenRequestBodyIsMissing() throws Exception {
+    mvc.perform(post("/payment")
+            .contentType(MediaType.APPLICATION_JSON))
+        .andExpect(status().isBadRequest());
   }
 
   // --- POST: bank unavailable ---

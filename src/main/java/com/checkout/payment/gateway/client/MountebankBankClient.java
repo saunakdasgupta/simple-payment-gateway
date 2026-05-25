@@ -27,8 +27,13 @@ public class MountebankBankClient implements BankClient {
   @Override
   public BankPaymentResponse processPayment(BankPaymentRequest request) {
     try {
-      return restTemplate.postForObject(bankSimulatorUrl + "/payments", request,
-          BankPaymentResponse.class);
+      BankPaymentResponse response = restTemplate.postForObject(
+          bankSimulatorUrl + "/payments", request, BankPaymentResponse.class);
+      if (response == null) {
+        LOG.warn("Bank returned empty response from {}", bankSimulatorUrl);
+        throw new BankUnavailableException("Bank returned an empty response");
+      }
+      return response;
     } catch (HttpServerErrorException.ServiceUnavailable e) {
       LOG.warn("Bank unavailable at {}", bankSimulatorUrl);
       throw new BankUnavailableException("Bank is currently unavailable");

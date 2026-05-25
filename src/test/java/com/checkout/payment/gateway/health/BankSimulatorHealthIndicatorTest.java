@@ -14,6 +14,7 @@ import org.springframework.boot.actuate.health.Status;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 
@@ -46,6 +47,18 @@ class BankSimulatorHealthIndicatorTest {
     // Any HTTP response (even 4xx) means the bank is reachable
     when(restTemplate.getForEntity(eq(BANK_URL + "/payments"), eq(String.class)))
         .thenThrow(HttpClientErrorException.create(HttpStatus.NOT_FOUND, "Not Found", null, null, null));
+
+    Health health = indicator.health();
+
+    assertThat(health.getStatus()).isEqualTo(Status.UP);
+  }
+
+  @Test
+  void shouldReturnUpWhenBankRespondsWithServerErrorStatus() {
+    // 5xx means the bank process is running but returned an error — still reachable
+    when(restTemplate.getForEntity(eq(BANK_URL + "/payments"), eq(String.class)))
+        .thenThrow(HttpServerErrorException.create(
+            HttpStatus.INTERNAL_SERVER_ERROR, "Internal Server Error", null, null, null));
 
     Health health = indicator.health();
 

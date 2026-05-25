@@ -178,6 +178,19 @@ class PaymentGatewayServiceTest {
     assertThat(response.getCardNumberLastFour()).isEqualTo(0);
   }
 
+  @Test
+  void shouldStoreDeclinedPaymentInRepository() {
+    PostPaymentRequest request = requestFor("2222405343248872");
+    when(validator.validate(request)).thenReturn(Optional.empty());
+    when(bankClient.processPayment(any())).thenReturn(new BankPaymentResponse(false, ""));
+
+    service.processPayment(request);
+
+    ArgumentCaptor<PaymentResponse> captor = ArgumentCaptor.forClass(PaymentResponse.class);
+    verify(paymentsRepository).add(captor.capture());
+    assertThat(captor.getValue().getStatus()).isEqualTo(PaymentStatus.DECLINED);
+  }
+
   // --- processPayment: bank request formatting ---
 
   @Test

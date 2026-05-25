@@ -70,6 +70,13 @@ class PaymentRequestValidatorTest {
     assertThat(validator.validate(request)).isPresent();
   }
 
+  @Test
+  void shouldRejectWhenCardNumberIsEmpty() {
+    PostPaymentRequest request = validRequest();
+    request.setCardNumber("");
+    assertThat(validator.validate(request)).isPresent();
+  }
+
   // --- Expiry month ---
 
   @Test
@@ -87,6 +94,14 @@ class PaymentRequestValidatorTest {
   }
 
   // --- Expiry date (combined) ---
+
+  @Test
+  void shouldRejectWhenExpiryYearIsInThePast() {
+    PostPaymentRequest request = validRequest();
+    request.setExpiryMonth(12);
+    request.setExpiryYear(2020);
+    assertThat(validator.validate(request)).isPresent();
+  }
 
   @Test
   void shouldRejectWhenCardIsExpired() {
@@ -133,6 +148,13 @@ class PaymentRequestValidatorTest {
   void shouldRejectWhenCurrencyContainsDigits() {
     PostPaymentRequest request = validRequest();
     request.setCurrency("G1P");
+    assertThat(validator.validate(request)).isPresent();
+  }
+
+  @Test
+  void shouldRejectWhenCurrencyIsEmpty() {
+    PostPaymentRequest request = validRequest();
+    request.setCurrency("");
     assertThat(validator.validate(request)).isPresent();
   }
 
@@ -194,6 +216,13 @@ class PaymentRequestValidatorTest {
     PostPaymentRequest request = validRequest();
     request.setCvv("1234");
     assertThat(validator.validate(request)).isEmpty();
+  }
+
+  @Test
+  void shouldRejectWhenCvvIsEmpty() {
+    PostPaymentRequest request = validRequest();
+    request.setCvv("");
+    assertThat(validator.validate(request)).isPresent();
   }
 
   @Test
