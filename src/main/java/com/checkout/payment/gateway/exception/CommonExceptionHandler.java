@@ -8,9 +8,10 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 @ControllerAdvice
-public class CommonExceptionHandler {
+public class CommonExceptionHandler extends ResponseEntityExceptionHandler {
 
   private static final Logger LOG = LoggerFactory.getLogger(CommonExceptionHandler.class);
 
@@ -32,5 +33,16 @@ public class CommonExceptionHandler {
     return new ResponseEntity<>(
         new ErrorResponse("Invalid ID format: expected a UUID"),
         HttpStatus.BAD_REQUEST);
+  }
+
+  @ExceptionHandler(Exception.class)
+  public ResponseEntity<ErrorResponse> handleUnexpected(Exception ex) {
+    // Catches anything not handled above — e.g. a RuntimeException thrown when the bank
+    // rejects the gateway's own request with a 4xx. requestId is still in MDC here
+    // (the RequestCorrelationFilter finally block has not run yet), so this log line
+    // is correlated to the originating request.
+    LOG.error("Unexpected error processing request", ex);
+    return new ResponseEntity<>(new ErrorResponse("An unexpected error occurred"),
+        HttpStatus.INTERNAL_SERVER_ERROR);
   }
 }

@@ -226,6 +226,42 @@ class PaymentGatewayIntegrationTest {
   }
 
   @Test
+  void shouldReturn502ImmediatelyWhenCircuitIsOpen() {
+    // With the circuit OPEN, POST /payments must fail fast — no network attempt to the bank.
+    // This verifies the circuit breaker protects payment processing, not just health checks.
+    circuitBreakerRegistry.circuitBreaker("bankSimulator").transitionToOpenState();
+
+    given()
+        .contentType(ContentType.JSON)
+        .body(validPaymentRequest())
+    .when()
+        .post("/payments")
+    .then()
+        .statusCode(502)
+        .body("message", notNullValue());
+
+    // The bank must never be called when the circuit is OPEN
+    wireMock.verify(0, postRequestedFor(urlEqualTo("/payments")));
+  }
+
+  @Test
+  void shouldReturn500WhenBankReturns4xx() {
+    // A 4xx from the bank means the gateway built a malformed request — gateway bug.
+    // Must surface as 500 (not 502) with a controlled error body.
+    wireMock.stubFor(post(urlEqualTo("/payments"))
+        .willReturn(aResponse().withStatus(400)));
+
+    given()
+        .contentType(ContentType.JSON)
+        .body(validPaymentRequest())
+    .when()
+        .post("/payments")
+    .then()
+        .statusCode(500)
+        .body("message", notNullValue());
+  }
+
+  @Test
   void cardNumberLastFourShouldSerializeAsStringNotInteger() {
     // Verifies that JSON output is "8877" (string) not 8877 (number).
     // This catches a regression if cardNumberLastFour is changed back to int.

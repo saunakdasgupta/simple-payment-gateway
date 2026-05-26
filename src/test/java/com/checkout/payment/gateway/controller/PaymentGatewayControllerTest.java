@@ -131,6 +131,20 @@ class PaymentGatewayControllerTest {
         .andExpect(jsonPath("$.message").isNotEmpty());
   }
 
+  // --- POST: unexpected internal error ---
+
+  @Test
+  void shouldReturn500WhenUnexpectedExceptionOccurs() throws Exception {
+    when(paymentGatewayService.processPayment(any()))
+        .thenThrow(new RuntimeException("Unexpected internal error"));
+
+    mvc.perform(post("/payments")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content(validPaymentRequest()))
+        .andExpect(status().isInternalServerError())
+        .andExpect(jsonPath("$.message").isNotEmpty());
+  }
+
   private PaymentResponse buildResponse(UUID id, PaymentStatus status, String lastFour,
       String message) {
     return new PaymentResponse(id, status, lastFour, 12, 2027, "GBP", 100, message);

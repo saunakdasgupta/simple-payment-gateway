@@ -109,7 +109,8 @@ Returns the stored payment response by UUID (200 OK), or 404 if not found.
 | Authorized or Declined | 200 | The request was valid and processed |
 | Rejected (validation failure) | 400 | The request was malformed; merchant should fix input |
 | Payment ID not found | 404 | Standard REST convention |
-| Bank unavailable (5xx from bank) | 502 | Gateway acts as proxy; upstream failure maps to Bad Gateway |
+| Bank unavailable (5xx, timeout, circuit OPEN) | 502 | Gateway acts as proxy; upstream failure maps to Bad Gateway |
+| Gateway sent a malformed bank request | 500 | Gateway bug; a 4xx from the bank means our request was invalid |
 
 ### Rejected Payments Are Stored
 
@@ -148,6 +149,16 @@ All validation is fail-fast: the first failing rule causes an immediate `Rejecte
 - `amount`: positive integer, in minor currency units (e.g. `1050` for £10.50)
 - `cvv`: 3–4 numeric characters
 
+### Exception Handling
+
+`CommonExceptionHandler` extends `ResponseEntityExceptionHandler` so that Spring's built-in exception handling takes priority over the catch-all `@ExceptionHandler(Exception.class)`.
+
+When a request body is missing or unparseable, Spring MVC throws `HttpMessageNotReadableException`. `ResponseEntityExceptionHandler.handleHttpMessageNotReadable()` intercepts it first and returns 400. Without the `extends` clause, the catch-all would intercept it instead and return 500.
+
+The same applies to all Spring MVC framework exceptions (`MethodNotAllowedException`, `MissingServletRequestParameterException`, etc.) — the base class handles them before the catch-all can reach them.
+
+A 4xx response from the bank (e.g., HTTP 400) is treated as a gateway bug, not a bank availability issue: it means the gateway constructed a malformed request. This surfaces as `RuntimeException` (→ 500), not `BankUnavailableException` (→ 502), and is logged at ERROR rather than WARN.
+
 ### Bank Communication
 
 The gateway calls the acquiring bank at `bank.simulator.url` (configured in `application.properties`). The expiry date is formatted as `MM/YYYY` (zero-padded month) for the bank request. Any 5xx response from the bank is surfaced as `502 Bad Gateway` to the merchant.
@@ -174,7 +185,12 @@ A custom `BankSimulatorHealthIndicator` probes the acquiring bank on every healt
 | `/actuator/health/liveness` | `UP` | No restart |
 | `/actuator/health/readiness` | `UP` | Keep routing traffic |
 
-A Resilience4J circuit breaker protects the health probe: after three consecutive connection failures the circuit opens, and subsequent health checks fast-fail without attempting to reach the bank. The circuit transitions back to closed once the bank recovers.
+A Resilience4J circuit breaker named `bankSimulator` is shared between the health probe and payment processing. After three consecutive connection failures the circuit opens. While open:
+
+- `GET /actuator/health/bankSimulator` fast-fails immediately (no network attempt) and returns `DEGRADED`
+- `POST /payments` fast-fails immediately with `CallNotPermittedException` → `BankUnavailableException` → 502
+
+The circuit transitions to HALF_OPEN after `waitDurationInOpenState` (30s in production, 2s in tests), allows a single probe through, and returns to CLOSED on success.
 
 ### Metrics
 
@@ -214,6 +230,18 @@ Non-payment logs (startup, health checks) leave both slots empty: `[][]`.
 ## Production Considerations
 
 The following are out of scope for this challenge but would be required in a production system:
+
+### Circuit Breaker: `ignoreExceptions` for Gateway Bugs
+
+The circuit breaker currently records all exceptions as failures, including `HttpClientErrorException` (a 4xx from the bank, which means the gateway sent a malformed request). A gateway bug should not trip the circuit against a healthy bank.
+
+In production, configure:
+```properties
+resilience4j.circuitbreaker.instances.bankSimulator.ignoreExceptions=\
+  org.springframework.web.client.HttpClientErrorException
+```
+
+This causes the circuit breaker to re-throw the exception without recording it as a failure, so the 4xx propagates to the existing `HttpClientErrorException` catch block as normal.
 
 ### Idempotency
 
